@@ -1,4 +1,11 @@
-import { Client, GatewayIntentBits } from "discord.js";
+import {
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from "discord.js";
 import "dotenv/config";
 import { Player } from "discord-player";
 import buildCollection from "./src/core/build/buildCollection.js";
@@ -67,28 +74,211 @@ const initDiscordBot = async (accessToken) => {
   // Configuración del player con OAuth 2.0 token
   const player = new Player(client, {
     ytdlOptions: {
-      filter: "audioonly", // Solo descarga el audio
-      quality: "lowestaudio", // La calidad más baja de audio disponible
-      highWaterMark: 1 << 18, // Tamaño del buffer a 256 KB
-      dlChunkSize: 64 * 1024, // Fragmentos de descarga de 64 KB
+      filter: "audioonly",
+      quality: "lowestaudio",
+      highWaterMark: 1 << 18,
+      dlChunkSize: 64 * 1024,
       requestOptions: {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       },
-      liveBuffer: 10000, // Tamaño del buffer para streams en vivo a 10 segundos
-      begin: "0s", // Empezar desde el principio del video
+      liveBuffer: 10000,
+      begin: "0s",
     },
-    quality: "low", // Calidad de streaming baja
-    autoSelfDeaf: true, // Auto silenciar el bot al unirse a un canal de voz
-    initialVolume: 25, // Volumen inicial al 25%
-    bufferingTimeout: 2000, // Tiempo de espera para el buffering de audio a 2 segundos
-    leaveOnEnd: true, // Dejar el canal de voz cuando la cola termine
-    leaveOnStop: true, // Dejar el canal de voz cuando la música se detenga
-    leaveOnEmpty: true, // Dejar el canal de voz si está vacío
-    deafenOnJoin: true, // Auto-silenciarse al unirse a un canal de voz
+    quality: "low",
+    autoSelfDeaf: true,
+    initialVolume: 25,
+    bufferingTimeout: 2000,
+    leaveOnEnd: true,
+    leaveOnStop: true,
+    leaveOnEmpty: true,
+    deafenOnJoin: true,
   });
 
   // Cargar extractores
   player.extractors.loadDefault();
+
+  // Evento playerStart
+  player.events.on("playerStart", (queue, track) => {
+    const channel = queue.metadata.channel;
+    const requestedBy = queue.metadata.member;
+
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: track.author, iconURL: track.thumbnail })
+      .setTitle(track.title)
+      .setURL(track.url)
+      .setDescription(
+        `Requested by: ${requestedBy}\nDuration: ${track.duration}\nSongs in queue: ${queue.tracks.length}`
+      )
+      .setThumbnail(track.thumbnail)
+      .setColor(0x1db954);
+
+    const actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("skip")
+        .setLabel("Skip")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("stop")
+        .setLabel("Stop")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId("prev")
+        .setLabel("Previous")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true), // Prev button is disabled initially
+      new ButtonBuilder()
+        .setCustomId("next")
+        .setLabel("Next")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    const message = queue.metadata.send({
+      embeds: [embed],
+      components: [actionRow],
+    });
+
+    const filter = (interaction) =>
+      ["skip", "stop", "prev", "next"].includes(interaction.customId);
+    const collector = message.createMessageComponentCollector({
+      filter,
+      time: track.durationMS - 60000,
+    }); // Collect interactions until 1 minute before the song ends
+
+    collector.on("collect", async (interaction) => {
+      if (interaction.customId === "skip") {
+        await queue.skip();
+      } else if (interaction.customId === "stop") {
+        await queue.stop();
+      } else if (interaction.customId === "prev") {
+        // Implement previous functionality
+      } else if (interaction.customId === "next") {
+        // Implement next functionality
+      }
+      await interaction.deferUpdate();
+    });
+
+    collector.on("end", async () => {
+      const newActionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("skip")
+          .setLabel("Skip")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(true),
+        new ButtonBuilder()
+          .setCustomId("stop")
+          .setLabel("Stop")
+          .setStyle(ButtonStyle.Danger)
+          .setDisabled(true),
+        new ButtonBuilder()
+          .setCustomId("prev")
+          .setLabel("Previous")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true),
+        new ButtonBuilder()
+          .setCustomId("next")
+          .setLabel("Next")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true)
+      );
+      await message.edit({ components: [newActionRow] });
+    });
+
+    // Embed pagination logic
+    const queueEmbeds = [];
+    const tracksPerPage = 4;
+    for (let i = 0; i < queue.tracks.length; i += tracksPerPage) {
+      const currentTracks = queue.tracks.slice(i, i + tracksPerPage);
+      const embedPage = new EmbedBuilder()
+        .setAuthor({ name: track.author, iconURL: track.thumbnail })
+        .setTitle(track.title)
+        .setURL(track.url)
+        .setDescription(
+          currentTracks
+            .map((t, index) => `${i + index + 1}. ${t.title}`)
+            .join("\n")
+        )
+        .setThumbnail(track.thumbnail)
+        .setColor(0x1db954);
+      queueEmbeds.push(embedPage);
+    }
+
+    let currentPage = 0;
+
+    const updatePaginationButtons = () => {
+      return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("skip")
+          .setLabel("Skip")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("stop")
+          .setLabel("Stop")
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId("prev")
+          .setLabel("Previous")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(currentPage === 0),
+        new ButtonBuilder()
+          .setCustomId("next")
+          .setLabel("Next")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(currentPage === queueEmbeds.length - 1)
+      );
+    };
+
+    if (queueEmbeds.length > 1) {
+      const paginationMessage = queue.metadata.send({
+        embeds: [queueEmbeds[currentPage]],
+        components: [updatePaginationButtons()],
+      });
+
+      const paginationCollector =
+        paginationMessage.createMessageComponentCollector({
+          filter,
+          time: track.durationMS - 60000,
+        });
+
+      paginationCollector.on("collect", async (interaction) => {
+        if (interaction.customId === "prev") {
+          currentPage -= 1;
+        } else if (interaction.customId === "next") {
+          currentPage += 1;
+        }
+        await paginationMessage.edit({
+          embeds: [queueEmbeds[currentPage]],
+          components: [updatePaginationButtons()],
+        });
+        await interaction.deferUpdate();
+      });
+
+      paginationCollector.on("end", async () => {
+        const disabledRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId("skip")
+            .setLabel("Skip")
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(true),
+          new ButtonBuilder()
+            .setCustomId("stop")
+            .setLabel("Stop")
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(true),
+          new ButtonBuilder()
+            .setCustomId("prev")
+            .setLabel("Previous")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true),
+          new ButtonBuilder()
+            .setCustomId("next")
+            .setLabel("Next")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true)
+        );
+        await paginationMessage.edit({ components: [disabledRow] });
+      });
+    }
+  });
 };
