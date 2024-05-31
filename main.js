@@ -48,15 +48,47 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
+// Inicializa el cliente de Discord fuera de la función
+const client = new Client({
+  intents: [
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.Guilds,
+  ],
+});
+
+// Inicializa el player de Discord fuera de la función
+const player = new Player(client, {
+  ytdlOptions: {
+    filter: "audioonly",
+    quality: "lowestaudio",
+    highWaterMark: 1 << 18,
+    dlChunkSize: 64 * 1024,
+    requestOptions: {
+      headers: {
+        Authorization: `Bearer ${process.env.accessToken}`, // Se actualiza cuando se obtienen tokens
+      },
+    },
+    liveBuffer: 10000,
+    begin: "0s",
+  },
+  quality: "low",
+  autoSelfDeaf: true,
+  initialVolume: 25,
+  bufferingTimeout: 2000,
+  leaveOnEnd: true,
+  leaveOnStop: true,
+  leaveOnEmpty: true,
+  deafenOnJoin: true,
+});
+
+// Cargar extractores
+player.extractors.loadDefault();
+
 const initDiscordBot = async (accessToken) => {
-  const client = new Client({
-    intents: [
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.GuildMembers,
-      GatewayIntentBits.GuildVoiceStates,
-      GatewayIntentBits.Guilds,
-    ],
-  });
+  // Actualiza el token OAuth 2.0 en las opciones de ytdl
+  player.options.ytdlOptions.requestOptions.headers.Authorization = `Bearer ${accessToken}`;
 
   client.commands = await buildCollection("commands");
   client.buttons = await buildCollection("buttons");
@@ -68,36 +100,8 @@ const initDiscordBot = async (accessToken) => {
   reloadCommandsUpdateToSlash();
 
   client.login(process.env.token).then(async () => {
-    console.log(`${client.user.displayName} is connect!`);
+    console.log(`${client.user.displayName} is connected!`);
   });
-
-  // Configuración del player con OAuth 2.0 token
-  const player = new Player(client, {
-    ytdlOptions: {
-      filter: "audioonly",
-      quality: "lowestaudio",
-      highWaterMark: 1 << 18,
-      dlChunkSize: 64 * 1024,
-      requestOptions: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
-      liveBuffer: 10000,
-      begin: "0s",
-    },
-    quality: "low",
-    autoSelfDeaf: true,
-    initialVolume: 25,
-    bufferingTimeout: 2000,
-    leaveOnEnd: true,
-    leaveOnStop: true,
-    leaveOnEmpty: true,
-    deafenOnJoin: true,
-  });
-
-  // Cargar extractores
-  player.extractors.loadDefault();
 
   // Evento playerStart
   player.events.on("playerStart", (queue, track) => {
@@ -127,7 +131,7 @@ const initDiscordBot = async (accessToken) => {
         .setCustomId("prev")
         .setLabel("Previous")
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(true), // Prev button is disabled initially
+        .setDisabled(true),
       new ButtonBuilder()
         .setCustomId("next")
         .setLabel("Next")
@@ -144,7 +148,7 @@ const initDiscordBot = async (accessToken) => {
     const collector = message.createMessageComponentCollector({
       filter,
       time: track.durationMS - 60000,
-    }); // Collect interactions until 1 minute before the song ends
+    });
 
     collector.on("collect", async (interaction) => {
       if (interaction.customId === "skip") {
