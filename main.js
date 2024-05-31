@@ -105,7 +105,6 @@ const initDiscordBot = async (accessToken) => {
 
   // Evento playerStart
   player.events.on("playerStart", (queue, track) => {
-    const channel = queue.metadata.channel;
     const requestedBy = queue.metadata.member;
 
     const embed = new EmbedBuilder()
@@ -138,7 +137,7 @@ const initDiscordBot = async (accessToken) => {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    const message = queue.metadata.send({
+    const message = queue.metadata.channel.send({
       embeds: [embed],
       components: [actionRow],
     });
@@ -234,7 +233,7 @@ const initDiscordBot = async (accessToken) => {
     };
 
     if (queueEmbeds.length > 1) {
-      const paginationMessage = queue.metadata.send({
+      const paginationMessage = queue.metadata.channel.send({
         embeds: [queueEmbeds[currentPage]],
         components: [updatePaginationButtons()],
       });
