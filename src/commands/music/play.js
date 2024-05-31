@@ -4,11 +4,12 @@ import { ApplicationCommandOptionType } from "discord.js";
 export default {
   name: "play",
   global: true,
-  description: "play song",
+  description: "🎵 Play song with YT links or without links",
   options: [
     {
       name: "query",
-      description: "name of the music",
+      description:
+        "🎵 Enter the name or url of the song if not just type a hint",
       type: ApplicationCommandOptionType.String,
     },
   ],
