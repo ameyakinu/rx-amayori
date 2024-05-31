@@ -12,6 +12,7 @@ export default {
         "🎵 Enter the name or url of the song if not just type a hint",
       type: ApplicationCommandOptionType.String,
       required: true,
+      autocomplete: true,
     },
   ],
   async autocomplete(interaction) {
