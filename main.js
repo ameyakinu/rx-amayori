@@ -15,7 +15,7 @@ export const client = new Client({
   ],
 });
 
-//! gola
+//! hola como estan
 client.commands = await buildCollection("commands");
 client.buttons = await buildCollection("buttons");
 client.commandMessage = await buildCollection("messages");
